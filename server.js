@@ -1,0 +1,76 @@
+const express = require("express");
+const { MongoClient, ServerApiVersion } = require("mongodb");
+const dotenv = require("dotenv");
+const cors = require("cors");
+const bcrypt = require("bcrypt");
+
+dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 5000;
+// Middleware
+app.use(express.json());
+app.use(cors());
+
+// MongoDB Connection
+const uri = process.env.MONGO_URI;
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+async function run() {
+  try {
+    const usersCollection = client.db("islamic-quotes").collection("users");
+
+    app.post("/register", async (req, res) => {
+      try {
+        const { name, email, password, photo } = req.body;
+
+        const existUser = await usersCollection.findOne({ email });
+        if (existUser) {
+          return res.status(404).json({ message: "Email already registered" });
+        }
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const newUser = {
+          name,
+          email,
+          password: hashedPassword,
+          role: "user",
+          photo: photo || "",
+          crateAt: new Date(),
+          updateAt: new Date(),
+        };
+        await usersCollection.insertOne(newUser);
+        res
+          .status(201)
+          .json({ message: "User registered successfully", user: newUser });
+      } catch (error) {
+        res.status(500).json({ message: error.message });
+      }
+    });
+
+    // Connect the client to the server	(optional starting in v4.7)
+    await client.connect();
+    // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
+  } finally {
+    // Ensures that the client will close when you finish/error
+    // await client.close();
+  }
+}
+run().catch(console.dir);
+
+app.get("/", (req, res) => {
+  res.send("Server is running......");
+});
+
+app.listen(PORT, () => {
+  console.log(`server listening on port ${PORT}`);
+});
