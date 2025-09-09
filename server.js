@@ -1,5 +1,5 @@
 const express = require("express");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
@@ -27,27 +27,78 @@ const client = new MongoClient(uri, {
   },
 });
 
-// middleware
-const authenticate = (req, res, next) => {
-  const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "No token" });
-  }
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(403).json({ message: "Invalid token" });
-  }
-};
 async function run() {
   try {
     const usersCollection = client.db("islamic-quotes").collection("users");
+    const quotesCollection = client.db("islamic-quotes").collection("quotes");
+
+    // middleware
+    const authenticate = async (req, res, next) => {
+      const token =
+        req.cookies.token || req.headers.authorization?.split(" ")[1];
+      if (!token) {
+        return res.status(401).json({ message: "No token" });
+      }
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await usersCollection.findOne(
+          { _id: new ObjectId(decoded.id) },
+          { projection: { password: 0 } }
+        );
+        req.user = user;
+        next();
+      } catch (error) {
+        console.log("error from authenticate", error);
+        return res.status(403).json({ message: "Invalid token" });
+      }
+    };
 
     // check user
     app.get("/me", authenticate, (req, res) => {
-      res.json({ authenticate: true, user: req.user });
+      res.json({
+        authenticate: true,
+        user: {
+          id: req.user._id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role,
+          photo: req.user.photo,
+        },
+      });
+    });
+
+    app.post("/add", authenticate, async (req, res) => {
+      try {
+        const { quote, author, category } = req.body;
+
+        if (!quote || !author || !category) {
+          return res.status(400).json({ message: "All fields are required" });
+        }
+
+        const newQuote = {
+          quote,
+          author,
+          category,
+          approved: false,
+          createdBy: req.user.email,
+          createdAt: new Date(),
+        };
+
+        const result = await quotesCollection.insertOne(newQuote);
+
+        res.status(201).json({
+          message: "Quote added successfully",
+          quote: newQuote,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+    app.get("/pending-quotes",authenticate, async (req, res) => {
+      const result = await quotesCollection.find({ approved: false }).toArray();
+      res.status(200).json({ quotes: result });
     });
 
     // user logout
