@@ -96,10 +96,37 @@ async function run() {
       }
     });
 
-    app.get("/pending-quotes",authenticate, async (req, res) => {
+    app.get("/pending-quotes", authenticate, async (req, res) => {
       const result = await quotesCollection.find({ approved: false }).toArray();
       res.status(200).json({ quotes: result });
     });
+
+    // quotes approved api end point
+    app.put("/quotes/approve/:id", authenticate, async (req, res) => {
+      try {
+        // // check if user is admin
+        // if (req.user.role !== "admin") {
+        //   return res.status(403).json({ message: "Access denied" });
+        // }
+        
+        const { id } = req.params;
+        const result = await quotesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { approved: true } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).json({ message: "Quote not found" });
+        }
+
+        res.json({ message: "Quote approved successfully" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+    
 
     // user logout
     app.post("/logout", (req, res) => {
