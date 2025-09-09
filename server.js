@@ -34,8 +34,7 @@ async function run() {
 
     // middleware
     const authenticate = async (req, res, next) => {
-      const token =
-        req.cookies.token || req.headers.authorization?.split(" ")[1];
+      const token = req.cookies.token;
       if (!token) {
         return res.status(401).json({ message: "No token" });
       }
@@ -101,6 +100,22 @@ async function run() {
       res.status(200).json({ quotes: result });
     });
 
+    app.get("/user-quotes", authenticate, async (req, res) => {
+      const email = req.query.email;
+      console.log(email);
+      const result = await quotesCollection
+        .find({ createdBy: email })
+        .toArray();
+      res.status(200).json({ quotes: result });
+    });
+
+    app.get("/all-quotes", async (req, res) => {
+      const email = req.query.email;
+      console.log(email);
+      const result = await quotesCollection.find({}).toArray();
+      res.status(200).json({ quotes: result });
+    });
+
     // quotes approved api end point
     app.put("/quotes/approve/:id", authenticate, async (req, res) => {
       try {
@@ -108,7 +123,7 @@ async function run() {
         // if (req.user.role !== "admin") {
         //   return res.status(403).json({ message: "Access denied" });
         // }
-        
+
         const { id } = req.params;
         const result = await quotesCollection.updateOne(
           { _id: new ObjectId(id) },
@@ -126,7 +141,57 @@ async function run() {
       }
     });
 
-    
+    // PUT /quotes/edit/:id
+    app.put("/quotes/edit/:id", authenticate, async (req, res) => {
+      try {
+        // if (req.user.role !== "admin") {
+        //   return res.status(403).json({ message: "Access denied" });
+        // }
+
+        const { id } = req.params;
+        const { quote, author, category } = req.body;
+
+        const result = await quotesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { quote, author, category } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res
+            .status(404)
+            .json({ message: "Quote not found or no changes" });
+        }
+
+        res.json({ message: "Quote updated successfully" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+    // DELETE /quotes/:id
+    app.delete("/quotes/delete/:id", authenticate, async (req, res) => {
+      try {
+        // check if user is admin
+        // if (req.user.role !== "admin") {
+        //   return res.status(403).json({ message: "Access denied" });
+        // }
+
+        const { id } = req.params;
+        const result = await quotesCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: "Quote not found" });
+        }
+
+        res.json({ message: "Quote deleted successfully" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
     // user logout
     app.post("/logout", (req, res) => {
@@ -141,7 +206,7 @@ async function run() {
 
     app.post("/register", async (req, res) => {
       try {
-        // const { name, email, password, photo } = req.body;
+        const { name, email, password, photo } = req.body;
 
         const existUser = await usersCollection.findOne({ email });
         if (existUser) {
