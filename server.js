@@ -4,19 +4,19 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
-// app.use(cors());
+app.use(cookieParser());
 const corsOption = {
   origin: ["http://localhost:3000"],
   credentials: true,
 };
 app.use(cors(corsOption));
-
 // MongoDB Connection
 const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri, {
@@ -29,7 +29,7 @@ const client = new MongoClient(uri, {
 
 // middleware
 const authenticate = (req, res, next) => {
-  const token = req.cookie.token || req.headers.authorization?.split(" ")[1];
+  const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
   if (!token) {
     return res.status(401).json({ message: "No token" });
   }
@@ -44,6 +44,22 @@ const authenticate = (req, res, next) => {
 async function run() {
   try {
     const usersCollection = client.db("islamic-quotes").collection("users");
+
+    // check user
+    app.get("/me", authenticate, (req, res) => {
+      res.json({ authenticate: true, user: req.user });
+    });
+
+    // user logout
+    app.post("/logout", (req, res) => {
+      res.clearCookie("token", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: false, // true only in production with https
+        path: "/", // IMPORTANT: must match cookie path
+      });
+      res.json({ message: "Logged out" });
+    });
 
     app.post("/register", async (req, res) => {
       try {
